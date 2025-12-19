@@ -1,0 +1,162 @@
+function [RANKED, WEIGHT, SUBSET] = FilterMethod(TrainData , alpha)
+X = TrainData.Inputs;
+Y = TrainData.Targets;
+fprintf('\n+ Feature selection by filter method \n');
+
+N = size(X,2);
+
+ % eps = 2e-06 * N;
+
+ eps = 5e-06 * N;
+
+factor = 1 - eps; % shrinking 
+
+%% Building the Graph
+[A,rho] = getGraphWeights(full(X), Y, alpha, eps );
+
+%% Letting paths tend to infinite
+I = eye( size( A ,1 )); % Identity Matrix
+
+% rho = max(eig(A));
+
+r = factor/rho; % Set a meaningful value for r :=  0 < r < 1/rho
+
+y = I - ( r * A );
+
+S = inv( y );
+
+
+%% 5) Estimating energy scores
+WEIGHT = sum( S , 2 ); % prob. scores s(i)
+
+%% 6) Ranking features according to s
+[~ , RANKED ]= sort( WEIGHT , 'descend' );
+
+RANKED = RANKED';
+WEIGHT = WEIGHT';
+
+e = ones(N,1);
+t = S * e;
+
+nbins = 0.007*N;
+
+
+counts = hist(t,nbins);
+thr = min(counts);
+size_sub = sum(counts>thr);
+
+SUBSET = RANKED(1:size_sub);
+
+
+end
+
+% Building the Graph - Supervised
+function [G, rho] = getGraphWeights( train_x , train_y,  alpha, eps )
+uq = unique(train_y);
+
+% Metric 1: Mutual Information
+%  =========================================================================
+
+mi_s = [];
+[~,mi_s] = MuteInf(train_x,train_y,12);
+mi_s(isnan(mi_s)) = 0; % remove NaN
+mi_s(isinf(mi_s)) = 0; % remove inf
+
+% Zero-Max norm
+mi_s = mi_s - min(min( mi_s ));
+mi_s = mi_s./max(max( mi_s ));
+
+MI = repmat(mi_s',[size(mi_s,1),1]);
+
+% Metric 2: class separation
+%  =========================================================================
+
+fi_s = ([mean(train_x(train_y==uq(1),:)) - mean(train_x(train_y==uq(2),:))].^2);
+st   = std(train_x(train_y==uq(1),:)).^2;
+st   = st + std(train_x(train_y==uq(2),:)).^2;
+tmp = find(st==0); %% remove ones where nothing occurs
+st(tmp) = 10000;  %% remove ones where nothing occurs
+fi_s = fi_s ./ st;
+
+fi_s(isnan(fi_s)) = 0; % remove NaN
+fi_s(isinf(fi_s)) = 0; % remove inf
+
+
+%Zero-Max norm
+fi_s = fi_s - min(min( fi_s ));
+fi_s = fi_s ./max(max( fi_s ));
+
+FI = repmat(fi_s,[size(fi_s,2),1]);
+
+% Metric 3: Standard Deviation
+%  =========================================================================
+
+% Standard Deviation
+STD = std(train_x,[],1);
+STDMatrix = bsxfun( @max, STD, STD' );
+STDMatrix = STDMatrix - min(min( STDMatrix ));
+sigma_ij = STDMatrix./max(max( STDMatrix ));
+sigma_ij(isnan(sigma_ij)) = 0; % remove NaN
+sigma_ij(isinf(sigma_ij)) = 0; % remove inf
+
+SI=sigma_ij;
+
+% Metric 4: Collration-based
+%  =========================================================================
+
+[ corr_ij, pval ] = corr( train_x, 'type','Spearman' );
+corr_ij(isnan(corr_ij)) = 0; % remove NaN
+corr_ij(isinf(corr_ij)) = 0; % remove inf
+
+CO =  1-abs(corr_ij);
+
+
+
+% Metric 5: Chi-square
+%  =========================================================================
+scores = [];
+[chi,scores] = fscchi2(train_x,train_y);
+scores(isnan(scores))=0;  % remove NaN
+scores(isinf(scores))=0;  % remove inf
+
+
+% Zero-Max norm
+scores = scores - min(min( scores ));
+scores = scores./max(max( scores ));
+CH = repmat(scores',[size(scores,1),1]); 
+
+
+
+term1 = (MI + FI')/2;
+term2 = max(0, MI - SI)/2;
+term3 = (CH + CO)/2;
+
+G = alpha(1)*term1 + alpha(2)*term2 + alpha(3)*term3;
+
+
+% G = alpha(1)*[(MI + FI')/2] + alpha(2)*[abs(MI - SI)/2] + alpha(3)*[(CH + CO)/2];
+
+
+
+rho = max(sum(G,2));
+
+% Substochastic Rescaling 
+G = G ./ ( max(sum(G,2))+eps);
+
+assert(max(sum(G,2)) < 2);
+
+% deg = sum(G,2);
+% idx = deg > 1;
+% 
+% for i = find(idx)'
+%     neighbors = find(G(i,:));
+%     [~,minIdx] = min(abs(repmat(i,1,length(neighbors)) - neighbors));
+%     G(i, neighbors(setdiff(1:end,minIdx))) = 0;
+% end
+
+
+
+end
+
+%  =========================================================================
+

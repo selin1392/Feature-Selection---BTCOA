@@ -1,0 +1,156 @@
+clc
+clear
+close all
+
+
+
+% Feature Selection Using  BTCOA
+% with Nested Cross-Validation
+
+resultACC = [];
+resultNFS = [];
+resultCOST = [];
+resultTIME = [];
+resultAvERROR = [];
+
+
+%% Select Classification Method
+Methods = {'SVM','KNN'};
+Method = Methods{2};
+
+%% Select Method FS
+MethodFS = {'MinCost', 'MinRedouction', 'Exact', 'NewFit1'};
+MethodFS = MethodFS{4};
+nExact = 0.5;
+
+%% Load Data
+Name = {'LYMPHOMA','DLBCL', 'Colon', 'Prostate_GE', 'Leukemia1','ALL_AML', 'GLI_85','lung', 'ALL_AML_3'...
+        'MLL','CNS', 'GLIOMA','OVARIAN', 'bladder_cancer', 'Brain_Tumor_2', 'Breast_Cancer', 'SRBCT'...
+        'Prostate_Tumor', 'CARCINOM', 'childhood', 'CML_treatment', 'warpAR10P', 'Leukemia','Leukemia_2', 'Leukemia_3'};
+
+ NameData = Name{1}; 
+ data = LoadData(NameData);
+ % data = readmatrix('Covid.csv');
+
+
+ for run = 1:1
+
+%% Manage Data
+   
+[OuterFolds, R] = ManageData_NestedCV(data, Method);
+
+for k = 1:length(OuterFolds)
+
+    TrainData = OuterFolds(k).Train;
+    TestData  = OuterFolds(k).Test;
+
+end
+
+    %% Graph-Based Fiter Method
+    ControlParS = {'Aoutomatic', '90%', '50%'};
+    ControlPar = ControlParS{1};
+
+   % alpha = [0.3, 0.2, 0.5];
+
+
+    [Rank, W, Subset] = FilterMethod(TrainData);
+    [~, SO] = sort(W, 'descend');
+    n = numel(W);
+    switch ControlPar
+        case 'Aoutomatic'
+            Sstar = Subset;
+        case '90%'
+            Sstar = SO(1:round(0.9*n));
+        case '50%'
+            Sstar = SO(1:round(0.5*n));
+    end
+    TrainData.Inputs = TrainData.Inputs(:, Sstar);
+    TestData.Inputs = TestData.Inputs(:, Sstar);
+
+   
+    
+    %% Set Params
+    Params.nPop = 20;
+    Params.MaxIt =2;
+
+    %% Classification,
+    TrainData.Kfold = 'on';
+    TrainData.MethodFS = MethodFS;
+    TrainData.nExact = nExact;
+
+    Results = FeatureSelectionUsingTanCot(Params, TrainData);
+
+
+datasetName = NameData;        % For example 'Colon'
+methodName  = 'TanCot';        % Algorithm name
+
+
+
+bestSubset = Results.FeatureSelected;
+
+Xtrain = TrainData.Inputs(:, bestSubset);
+Ttrain = TrainData.Targets;
+
+template = templateSVM();  
+Classify = fitcecoc(Xtrain, Ttrain, 'Learners', template);
+
+Results.Classify = Classify;
+
+
+
+
+    %% Prediction AND Evaluation Confustion Matrix & ROC
+    ResultsTrain = EvaluatePlot(TrainData, Results, [Method, ' Train ']);
+
+   ResultsTest = EvaluatePlot(TestData, Results, [Method, ' Test ']);
+
+   
+   %% Displey
+
+    % %  disp(ResultsTest);
+    LastName = {'TanCot'};
+    Accuracy = Results.Accuracy;
+    Precision = Results.Precision;
+    Sensitivity = Results.Sensitivity;
+    Specificity = Results.Specificity;
+    F1score = Results.F1score;
+    Gmean = Results.Gmean;
+    BalancedAcc = Results.BalancedAcc;
+    AUROC=Results.AUROC;
+   
+
+     % Perecision = mean(ResultsTrain.Precision);
+     % Sensitivity=mean(ResultsTrain.Sensitivity);
+     nSelect = [Results.nS];
+     nFeatures = size(TrainData.Inputs, 2);
+     Cost = min([Results.CostValue]);
+    % pReduction = 100*[Results.Predaucrion];
+    % T = table(Cost,Accuracy,Perecision,pReduction,Time,nSelect,nFeatures,...
+    %     'RowNames',LastName);
+    %  disp(T);
+    resultACC(run) = Accuracy;
+    resultNFS(run) = nSelect;
+    resultCOST(run) = Cost;
+
+
+end
+
+fprintf('--------------------------------------');
+
+% fprintf('\n  DATASET : ', NameData);
+
+display(['DATASET : ', num2str(NameData)]);
+
+display(['The BEST optimal value of the ACCURACY found by BTCOA is : ', num2str(max(resultACC))]);
+display(['The BEST optimal value of the NUMBER FEATURE SELECTED found by BTCOA is : ', num2str(min(resultNFS))]);
+
+
+ % disp(['Sensitivity:', num2str(Sensitivity)])
+ % disp(['Specificity:', num2str(Specificity)])
+ % disp(['Precision:', num2str(Precision)])
+ disp(['F1_score:', num2str(F1score)])
+ % disp(['Gmean:', num2str(Gmean)])
+ disp(['Balance_accuracy:', num2str(BalancedAcc)])
+ disp(['AUROC:', num2str(AUROC)])
+% disp(['MCC:', num2str(Result.MCC)])
+% disp(['kappa:', num2str(Result.kappa)])
