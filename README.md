@@ -28,34 +28,6 @@ environments.
 
 ## Repository Structure
 
-Feature-Selection---BTCOA/
-│
-├── src/
-│   ├── FeatureSelectionUsingTanCot.m
-│   ├── FilterMethod.m
-│   ├── SortPopulation.m
-│   ├── Evaluatefeatures.m
-│   ├── LoadData.m
-│   ├── ManageData.m
-│   ├── ManageData_NestedCV.m
-│   └── MainCodeFS.m
-│
-├── preprocessing/
-│   └── ManageData_NestedCV.m
-│
-├── evaluation/
-│   ├── Metric.m
-│   └── PrecisionRecall.m
-│
-├── datasets/
-│   └── README.md
-│
-├── results/
-│   └── README.md
-│
-├── run_experiment.m
-├── README.md
-└── LICENSE
 
 ---
 
@@ -64,3 +36,6 @@ Feature-Selection---BTCOA/
 1. Clone the repository:
 ```bash
 git clone https://github.com/selin1392/Feature-Selection---BTCOA.git
+
+
+run_experiment
